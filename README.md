@@ -1,4 +1,6 @@
 # MAX7219 Raspberry Pi Clock
+🚧 Work in progress — the clock is evolving.
+Expect new features, breaking changes and experiments.
 
 32x8 LED matrix clock for Raspberry Pi using luma.led_matrix.
 
