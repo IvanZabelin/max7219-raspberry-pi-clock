@@ -197,6 +197,113 @@ def marquee_once_legacy(device, text_ascii: str, font, speed=0.07, gap=16):
             legacy_text(draw, (x, y), text_ascii, font=font, fill="white")
         time.sleep(speed)
 
+
+def draw_center_text(draw, device, txt: str, font):
+    w, h = textsize(txt, font=font)
+    x = max(0, (device.width - w) // 2)
+    y = max(0, (device.height - h) // 2)
+    legacy_text(draw, (x, y), txt, font=font, fill="white")
+
+
+def get_cpu_load_pct() -> int | None:
+    """1-minute load average converted to % of one core."""
+    try:
+        load1 = os.getloadavg()[0]
+        return int(round(max(0.0, load1 * 100.0)))
+    except Exception:
+        return None
+
+
+def get_ram_used_pct() -> int | None:
+    try:
+        mem_total = None
+        mem_avail = None
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    mem_total = int(line.split()[1])
+                elif line.startswith("MemAvailable:"):
+                    mem_avail = int(line.split()[1])
+                if mem_total and mem_avail:
+                    break
+        if not mem_total or mem_avail is None:
+            return None
+        used = max(0, mem_total - mem_avail)
+        return int(round((used / mem_total) * 100.0))
+    except Exception:
+        return None
+
+
+def get_ip_short() -> str | None:
+    try:
+        out = subprocess.check_output(["hostname", "-I"], stderr=subprocess.DEVNULL).decode().strip()
+        if not out:
+            return None
+        return out.split()[0]
+    except Exception:
+        return None
+
+
+def get_uptime_short() -> str | None:
+    try:
+        with open("/proc/uptime", "r") as f:
+            sec = int(float(f.read().split()[0]))
+        h = sec // 3600
+        m = (sec % 3600) // 60
+        return f"UP {h:02d}h{m:02d}"
+    except Exception:
+        return None
+
+
+def render_info_page(device, page: str, now: datetime, time_font, text_font, time_fmt: str,
+                     blink_colon: bool, colon_vgap: int, seconds_bar: bool,
+                     seconds_bar_dots: bool, temp_show_c: int, ticker_with_year: int,
+                     ticker_speed: float, ticker_gap: int):
+    p = page.strip().lower()
+
+    if p == "time":
+        s = now.strftime(time_fmt)
+        blink = bool(blink_colon and (now.second % 2 == 1))
+        with canvas(device) as draw:
+            draw_time_with_custom_colon(draw, device, s, time_font, blink=blink,
+                                        left_reserved=0, gap=1, colon_w=1,
+                                        colon_vgap=colon_vgap, time_offset=0,
+                                        align="center")
+            if seconds_bar:
+                draw_seconds_bar(draw, now, device.width, y=device.height - 1, dotted=seconds_bar_dots)
+        return
+
+    if p == "temp":
+        t = get_cpu_temp_c()
+        txt = "T --" if t is None else f"T {int(round(t))}{'C' if temp_show_c else ''}"
+    elif p == "cpu":
+        v = get_cpu_load_pct()
+        txt = "CPU --" if v is None else f"CPU {v}%"
+    elif p == "load":
+        try:
+            txt = f"LD {os.getloadavg()[0]:.2f}"
+        except Exception:
+            txt = "LD --"
+    elif p == "ram":
+        v = get_ram_used_pct()
+        txt = "RAM --" if v is None else f"RAM {v}%"
+    elif p == "ip":
+        v = get_ip_short()
+        txt = f"IP {v}" if v else "IP --"
+    elif p == "uptime":
+        txt = get_uptime_short() or "UP --"
+    elif p == "date":
+        txt = format_en_date(now, with_year=bool(ticker_with_year))
+    else:
+        txt = "N/A"
+
+    w, _ = textsize(txt, font=text_font)
+    if w > device.width:
+        marquee_once_legacy(device, txt, font=text_font, speed=ticker_speed, gap=ticker_gap)
+    else:
+        with canvas(device) as draw:
+            draw_center_text(draw, device, txt, font=text_font)
+
 # ------------------ Visual add-ons ------------------
 def draw_seconds_bar(draw, now_dt: datetime, width: int, y: int, dotted: bool = False):
     """Bottom progress bar for current second (0..59)."""
@@ -275,6 +382,15 @@ def main():
     ticker_gap       = _env_int("LED_TICKER_GAP", 16)
     ticker_with_year = _env_int("LED_TICKER_WITH_YEAR", 1)
 
+    # --- Info pages mode ---
+    info_enable_default = 1 if os.getenv("LED_PROFILE_NAME", "").strip().lower() == "info" else 0
+    info_enable = _env_bool("LED_INFO_ENABLE", info_enable_default)
+    info_pages_raw = os.getenv("LED_INFO_PAGES", "time,temp,cpu,load,ram,ip,date,uptime")
+    info_pages = [p.strip().lower() for p in info_pages_raw.split(",") if p.strip()]
+    if not info_pages:
+        info_pages = ["time", "temp", "date"]
+    info_rotate_sec = max(1.0, _env_float("LED_INFO_ROTATE_SEC", 6.0))
+
     # --- Temperature widget ---
     show_temp   = _env_int("LED_DRAW_TEMP", 1)
     show_unit_c = _env_int("LED_TEMP_SHOW_C", 1)
@@ -305,6 +421,7 @@ def main():
     print(
         f"[led-clock] start profile={profile_name} temp={int(show_temp)} ticker_every={ticker_every} "
         f"seconds_bar={int(seconds_bar)} minute_swipe={int(minute_swipe_en)} "
+        f"info_enable={int(info_enable)} info_pages={','.join(info_pages)} info_rotate={info_rotate_sec}s "
         f"brightness(day/night)={day_brt}/{night_brt}",
         flush=True,
     )
@@ -320,6 +437,10 @@ def main():
 
     # Track last rendered minute for swipe
     last_rendered_minute = None
+
+    # Info pages state
+    info_idx = 0
+    info_last_switch_ts = 0.0
 
     # Signals
     signal.signal(signal.SIGTERM, handle_signal)
@@ -342,6 +463,34 @@ def main():
             if sparkle_on_hour and now.minute == 0 and now.second == 0:
                 hour_sparkle(device, duration=sparkle_duration,
                              density=sparkle_density, fps=sparkle_fps)
+
+            # Dedicated info-pages mode (page carousel)
+            if info_enable:
+                now_ts = time.monotonic()
+                if info_last_switch_ts == 0.0:
+                    info_last_switch_ts = now_ts
+                elif (now_ts - info_last_switch_ts) >= info_rotate_sec:
+                    info_idx = (info_idx + 1) % len(info_pages)
+                    info_last_switch_ts = now_ts
+
+                render_info_page(
+                    device=device,
+                    page=info_pages[info_idx],
+                    now=now,
+                    time_font=time_font,
+                    text_font=ticker_font,
+                    time_fmt=time_fmt,
+                    blink_colon=bool(blink_colon),
+                    colon_vgap=colon_vgap,
+                    seconds_bar=bool(seconds_bar),
+                    seconds_bar_dots=bool(seconds_bar_dots),
+                    temp_show_c=show_unit_c,
+                    ticker_with_year=ticker_with_year,
+                    ticker_speed=ticker_speed,
+                    ticker_gap=ticker_gap,
+                )
+                time.sleep(0.2)
+                continue
 
             # Ticker: scroll date periodically (skip if we are on the exact hour second 0 to avoid conflict)
             if time.monotonic() - last_ticker_ts >= ticker_every and not (now.minute == 0 and now.second == 0):
@@ -428,11 +577,16 @@ LED_DRAW_TEMP=1
 LED_TEMP_SHOW_C=1
 
 # Date ticker (English ASCII)
-LED_TICKER_EVERY=60       # seconds between scrolls
+LED_TICKER_EVERY=60       # seconds between scrolls (non-info mode)
 LED_TICKER_SPEED=0.07     # higher -> slower scroll
 LED_TICKER_GAP=16         # blank space after text
 LED_TICKER_WITH_YEAR=1
 LED_TICKER_FONT=1         # 1=TINY, 2=SINCLAIR (affects ticker only)
+
+# Info carousel mode
+LED_INFO_ENABLE=0
+LED_INFO_PAGES=time,temp,cpu,load,ram,ip,date,uptime
+LED_INFO_ROTATE_SEC=6
 
 # Auto brightness
 LED_AUTO_DIM=1

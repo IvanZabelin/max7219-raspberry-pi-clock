@@ -93,7 +93,7 @@ python3 led_clock.py
 
 - `config/profiles/clock.env` — минимальный режим часов
 - `config/profiles/status.env` — сбалансированный режим статуса
-- `config/profiles/info.env` — больше информации и анимаций
+- `config/profiles/info.env` — инфо-карусель (настраиваемый набор экранов)
 
 Быстрое переключение:
 
@@ -105,6 +105,12 @@ chmod +x scripts/mode.sh
 ```
 
 Скрипт обновляет `/etc/default/led-clock` и перезапускает сервис.
+
+Режим `info` настраивается через:
+
+- `LED_INFO_PAGES=time,temp,cpu,load,ram,ip,date,uptime`
+- `LED_INFO_ROTATE_SEC=6`
+- `LED_INFO_ENABLE=1`
 
 ## Автозапуск через systemd
 

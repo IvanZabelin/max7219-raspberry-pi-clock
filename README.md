@@ -96,7 +96,7 @@ To keep code clean and follow configuration-as-data pattern, display behavior is
 
 - `config/profiles/clock.env` — minimal clock
 - `config/profiles/status.env` — balanced status mode
-- `config/profiles/info.env` — more info/animations
+- `config/profiles/info.env` — info carousel (custom page set)
 
 Switch mode quickly:
 
@@ -108,6 +108,12 @@ chmod +x scripts/mode.sh
 ```
 
 The script updates `/etc/default/led-clock` and restarts service.
+
+`info` mode is configurable via:
+
+- `LED_INFO_PAGES=time,temp,cpu,load,ram,ip,date,uptime`
+- `LED_INFO_ROTATE_SEC=6`
+- `LED_INFO_ENABLE=1`
 
 ## Autostart with systemd
 
