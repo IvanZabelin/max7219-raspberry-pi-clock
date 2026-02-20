@@ -46,6 +46,7 @@ python3 led_clock.py
 - `LED_FONT` (1 = TINY, 2 = SINCLAIR)
 - `LED_BLINK_COLON` (0/1)
 - `LED_COLON_VGAP` (default: `2`)
+- `LED_TIME_ALIGN` (`right` or `center`, default: `right`)
 
 ### Temperature widget
 

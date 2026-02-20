@@ -43,6 +43,7 @@ python3 led_clock.py
 - `LED_FONT` (1 = TINY, 2 = SINCLAIR)
 - `LED_BLINK_COLON` (0/1)
 - `LED_COLON_VGAP` (по умолчанию: `2`)
+- `LED_TIME_ALIGN` (`right` или `center`, по умолчанию: `right`)
 
 ### Виджет температуры
 

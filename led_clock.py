@@ -132,7 +132,8 @@ def draw_small35(draw, x: int, y: int, txt: str, spacing: int = 1):
 # ------------------ Time rendering with custom colon ------------------
 def draw_time_with_custom_colon(draw, device, timestr: str, font, blink: bool,
                                 left_reserved: int, gap: int = 1, colon_w: int = 1,
-                                colon_vgap: int = 2, time_offset: int = 0):
+                                colon_vgap: int = 2, time_offset: int = 0,
+                                align: str = "right"):
     """
     Draw right-aligned time HH:MM.
     Custom colon: two stacked dots in one column, vertical gap = colon_vgap.
@@ -152,14 +153,19 @@ def draw_time_with_custom_colon(draw, device, timestr: str, font, blink: bool,
     if left_reserved + w_time > device.width:
         left_reserved = max(0, device.width - w_time)
 
-    x0 = max(0, device.width - (left_reserved + w_time)) + time_offset
+    if align == "center":
+        x_time = max(0, (device.width - w_time) // 2) + time_offset
+        left_reserved = 0
+    else:
+        x_time = max(0, device.width - (left_reserved + w_time)) + time_offset
+
     y = max(0, (device.height - h) // 2)
 
     # Hours
-    legacy_text(draw, (x0 + left_reserved, y), hh, font=font, fill="white")
+    legacy_text(draw, (x_time + left_reserved, y), hh, font=font, fill="white")
 
     # Colon (two dots, vertically separated by colon_vgap)
-    cx = x0 + left_reserved + w_h + gap
+    cx = x_time + left_reserved + w_h + gap
     if not blink:
         t1 = y + max(0, (h - 1 - colon_vgap) // 2)
         t2 = min(y + h - 1, t1 + colon_vgap)
@@ -217,7 +223,8 @@ def hour_sparkle(device, duration: float = 0.45, density: float = 0.15, fps: int
 
 def minute_swipe(device, timestr: str, time_font, blink: bool,
                  left_reserved: int, colon_vgap: int,
-                 temp_txt: str | None, swipe_px: int = 8, frame_delay: float = 0.03):
+                 temp_txt: str | None, swipe_px: int = 8, frame_delay: float = 0.03,
+                 time_align: str = "right"):
     """
     Slide-in animation for minute change: new time slides in from the right by 'swipe_px'.
     Temp widget stays static on the left.
@@ -234,7 +241,8 @@ def minute_swipe(device, timestr: str, time_font, blink: bool,
             # draw time with positive offset (shift to the right)
             draw_time_with_custom_colon(draw, device, timestr, time_font, blink=False,
                                         left_reserved=left_reserved, gap=1,
-                                        colon_w=1, colon_vgap=colon_vgap, time_offset=dx)
+                                        colon_w=1, colon_vgap=colon_vgap, time_offset=dx,
+                                        align=time_align)
         time.sleep(frame_delay)
 
 # ------------------ Main ------------------
@@ -257,6 +265,9 @@ def main():
     time_fmt    = os.getenv("LED_TIME_FMT", "%H:%M")
     blink_colon = _env_int("LED_BLINK_COLON", 1)
     colon_vgap  = _env_int("LED_COLON_VGAP", 2)         # vertical gap between colon dots
+    time_align  = os.getenv("LED_TIME_ALIGN", "right").strip().lower()
+    if time_align not in ("right", "center"):
+        time_align = "right"
 
     # --- Ticker (English ASCII) ---
     ticker_every     = _env_float("LED_TICKER_EVERY", 60.0)
@@ -373,7 +384,8 @@ def main():
                 # Run swipe with the NEW minute value
                 minute_swipe(device, s, time_font, blink=False,
                              left_reserved=left_reserved, colon_vgap=colon_vgap,
-                             temp_txt=temp_txt, swipe_px=minute_swipe_px, frame_delay=minute_swipe_dt)
+                             temp_txt=temp_txt, swipe_px=minute_swipe_px, frame_delay=minute_swipe_dt,
+                             time_align=time_align)
                 last_rendered_minute = now.minute
                 # After swipe, draw one static frame this iteration (fall-through)
 
@@ -387,7 +399,8 @@ def main():
                 # Time (right)
                 draw_time_with_custom_colon(draw, device, s, time_font, blink=blink,
                                             left_reserved=left_reserved, gap=1,
-                                            colon_w=1, colon_vgap=colon_vgap, time_offset=0)
+                                            colon_w=1, colon_vgap=colon_vgap, time_offset=0,
+                                            align=time_align)
 
                 # Seconds bar at the bottom row
                 if seconds_bar:
