@@ -89,6 +89,25 @@ python3 led_clock.py
 - `LED_ORIENTATION` (default `-90`)
 - `LED_ROTATE` (default `0`)
 
+## Display modes and quick switching
+
+To keep code clean and follow configuration-as-data pattern, display behavior is grouped into profiles:
+
+- `config/profiles/clock.env` — minimal clock
+- `config/profiles/status.env` — balanced status mode
+- `config/profiles/info.env` — more info/animations
+
+Switch mode quickly:
+
+```bash
+chmod +x scripts/mode.sh
+./scripts/mode.sh clock
+./scripts/mode.sh status
+./scripts/mode.sh info
+```
+
+The script updates `/etc/default/led-clock` and restarts service.
+
 ## Autostart with systemd
 
 Files in repo:

@@ -290,6 +290,14 @@ def main():
     serial = spi(port=port, device=device_idx, gpio=noop(), bus_speed_hz=bus_hz)
     device = max7219(serial, cascaded=cascaded, block_orientation=orientation, rotate=rotate)
 
+    profile_name = os.getenv("LED_PROFILE_NAME", "custom")
+    print(
+        f"[led-clock] start profile={profile_name} temp={int(show_temp)} ticker_every={ticker_every} "
+        f"seconds_bar={int(seconds_bar)} minute_swipe={int(minute_swipe_en)} "
+        f"brightness(day/night)={day_brt}/{night_brt}",
+        flush=True,
+    )
+
     # Apply initial brightness based on current time
     def _apply_brightness(now: datetime):
         target = night_brt if _in_window(now, night_from, night_to) else day_brt

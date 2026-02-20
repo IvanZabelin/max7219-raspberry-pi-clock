@@ -86,6 +86,25 @@ python3 led_clock.py
 - `LED_ORIENTATION` (по умолчанию `-90`)
 - `LED_ROTATE` (по умолчанию `0`)
 
+## Режимы отображения и быстрое переключение
+
+Чтобы не захламлять код и придерживаться паттерна "конфигурация как данные", поведение табло разложено по профилям:
+
+- `config/profiles/clock.env` — минимальный режим часов
+- `config/profiles/status.env` — сбалансированный режим статуса
+- `config/profiles/info.env` — больше информации и анимаций
+
+Быстрое переключение:
+
+```bash
+chmod +x scripts/mode.sh
+./scripts/mode.sh clock
+./scripts/mode.sh status
+./scripts/mode.sh info
+```
+
+Скрипт обновляет `/etc/default/led-clock` и перезапускает сервис.
+
 ## Автозапуск через systemd
 
 Файлы в репозитории:
