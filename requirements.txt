@@ -1,0 +1,1 @@
+luma.led_matrix>=1.5.0
