@@ -1,0 +1,15 @@
+[Unit]
+Description=MAX7219 LED Clock
+After=network.target
+
+[Service]
+Type=simple
+User=theza
+WorkingDirectory=/opt/led-clock
+EnvironmentFile=-/etc/default/led-clock
+ExecStart=/usr/bin/python3 /opt/led-clock/led_clock.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

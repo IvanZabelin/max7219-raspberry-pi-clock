@@ -86,6 +86,30 @@ python3 led_clock.py
 - `LED_ORIENTATION` (по умолчанию `-90`)
 - `LED_ROTATE` (по умолчанию `0`)
 
+## Автозапуск через systemd
+
+Файлы в репозитории:
+
+- `deploy/systemd/led-clock.service`
+- `deploy/systemd/led-clock.env.example`
+- `scripts/install-systemd.sh`
+
+Установка на Raspberry Pi:
+
+```bash
+chmod +x scripts/install-systemd.sh
+./scripts/install-systemd.sh
+```
+
+Проверка сервиса:
+
+```bash
+sudo systemctl status led-clock.service
+sudo journalctl -u led-clock.service -f
+```
+
+Конфигурация переменных хранится в `/etc/default/led-clock`.
+
 ## Примечания
 
 - Скрипт корректно обрабатывает `SIGINT`/`SIGTERM` и очищает дисплей при завершении.
