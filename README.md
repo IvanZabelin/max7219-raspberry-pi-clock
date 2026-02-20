@@ -1,5 +1,8 @@
 # MAX7219 Raspberry Pi Clock
 
+Русская версия: [README.ru.md](README.ru.md)
+
+
 32x8 LED-matrix clock for Raspberry Pi (MAX7219 + SPI) with CPU temperature, date ticker, auto-brightness and lightweight animations.
 
 ## Features
