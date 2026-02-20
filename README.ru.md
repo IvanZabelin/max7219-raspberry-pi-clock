@@ -105,10 +105,12 @@ chmod +x scripts/install-systemd.sh
 
 ```bash
 sudo systemctl status led-clock.service
+tail -f /var/log/led-clock.log
 sudo journalctl -u led-clock.service -f
 ```
 
 Конфигурация переменных хранится в `/etc/default/led-clock`.
+Конфиг logrotate ставится в `/etc/logrotate.d/led-clock`.
 
 ## Примечания
 

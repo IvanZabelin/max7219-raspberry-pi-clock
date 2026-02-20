@@ -10,6 +10,8 @@ EnvironmentFile=-/etc/default/led-clock
 ExecStart=/usr/bin/python3 /opt/led-clock/led_clock.py
 Restart=always
 RestartSec=2
+StandardOutput=append:/var/log/led-clock.log
+StandardError=append:/var/log/led-clock.log
 
 [Install]
 WantedBy=multi-user.target

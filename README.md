@@ -108,10 +108,12 @@ Service checks:
 
 ```bash
 sudo systemctl status led-clock.service
+tail -f /var/log/led-clock.log
 sudo journalctl -u led-clock.service -f
 ```
 
 Environment config is stored in `/etc/default/led-clock`.
+Logrotate config is installed to `/etc/logrotate.d/led-clock`.
 
 ## Notes
 
