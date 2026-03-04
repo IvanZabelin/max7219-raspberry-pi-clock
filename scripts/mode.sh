@@ -6,7 +6,7 @@ PROFILES_DIR="config/profiles"
 TARGET_ENV="/etc/default/led-clock"
 
 if [[ -z "$MODE" ]]; then
-  echo "Usage: $0 <clock|status|info>"
+  echo "Usage: $0 <clock|status|info|tempclock|weather>"
   exit 1
 fi
 

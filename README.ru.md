@@ -50,6 +50,20 @@ python3 led_clock.py
 - `LED_DRAW_TEMP` (0/1)
 - `LED_TEMP_SHOW_C` (0/1)
 
+### Чередование температуры CPU/улицы
+
+- `LED_TEMP_CYCLE_ENABLE` (0/1)
+- `LED_TEMP_CYCLE_ITEMS` (например: `cpu,outdoor`)
+- `LED_TEMP_CYCLE_EVERY` (сек, по умолчанию `10`)
+
+### Погода на улице (Open-Meteo, без API-ключа)
+
+- `LED_WEATHER_ENABLE` (0/1)
+- `LED_WEATHER_PROVIDER` (`open-meteo`)
+- `LED_WEATHER_LAT` / `LED_WEATHER_LON` (обязательны для уличной температуры)
+- `LED_WEATHER_REFRESH` (сек, по умолчанию `1800`)
+- `LED_WEATHER_TIMEOUT` (сек, по умолчанию `4`)
+
 ### Бегущая дата
 
 - `LED_TICKER_EVERY` (сек, по умолчанию `60`)
@@ -94,6 +108,8 @@ python3 led_clock.py
 - `config/profiles/clock.env` — минимальный режим часов
 - `config/profiles/status.env` — сбалансированный режим статуса
 - `config/profiles/info.env` — инфо-карусель (настраиваемый набор экранов)
+- `config/profiles/tempclock.env` — температура + часы (без тикера)
+- `config/profiles/weather.env` — чередование температуры CPU/улицы
 
 Быстрое переключение:
 
@@ -102,6 +118,8 @@ chmod +x scripts/mode.sh
 ./scripts/mode.sh clock
 ./scripts/mode.sh status
 ./scripts/mode.sh info
+./scripts/mode.sh tempclock
+./scripts/mode.sh weather
 ```
 
 Скрипт обновляет `/etc/default/led-clock` и перезапускает сервис.

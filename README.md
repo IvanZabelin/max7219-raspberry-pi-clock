@@ -53,6 +53,20 @@ python3 led_clock.py
 - `LED_DRAW_TEMP` (0/1)
 - `LED_TEMP_SHOW_C` (0/1)
 
+### CPU/Outdoor temperature cycling
+
+- `LED_TEMP_CYCLE_ENABLE` (0/1)
+- `LED_TEMP_CYCLE_ITEMS` (e.g. `cpu,outdoor`)
+- `LED_TEMP_CYCLE_EVERY` (seconds, default `10`)
+
+### Outdoor weather (Open-Meteo, no API key)
+
+- `LED_WEATHER_ENABLE` (0/1)
+- `LED_WEATHER_PROVIDER` (`open-meteo`)
+- `LED_WEATHER_LAT` / `LED_WEATHER_LON` (required for outdoor temp)
+- `LED_WEATHER_REFRESH` (seconds, default `1800`)
+- `LED_WEATHER_TIMEOUT` (seconds, default `4`)
+
 ### Date ticker
 
 - `LED_TICKER_EVERY` (sec, default `60`)
@@ -97,6 +111,8 @@ To keep code clean and follow configuration-as-data pattern, display behavior is
 - `config/profiles/clock.env` — minimal clock
 - `config/profiles/status.env` — balanced status mode
 - `config/profiles/info.env` — info carousel (custom page set)
+- `config/profiles/tempclock.env` — temperature + clock (no ticker)
+- `config/profiles/weather.env` — CPU/outdoor temperature cycling
 
 Switch mode quickly:
 
@@ -105,6 +121,8 @@ chmod +x scripts/mode.sh
 ./scripts/mode.sh clock
 ./scripts/mode.sh status
 ./scripts/mode.sh info
+./scripts/mode.sh tempclock
+./scripts/mode.sh weather
 ```
 
 The script updates `/etc/default/led-clock` and restarts service.

@@ -17,10 +17,14 @@ All knobs are configurable via environment variables (see cheatsheet at bottom).
 import os
 import re
 import time
+import json
 import random
 import signal
+import threading
 import subprocess
 from datetime import datetime
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 from luma.core.interface.serial import spi, noop
 from luma.led_matrix.device import max7219
@@ -87,6 +91,52 @@ def get_cpu_temp_c():
     except Exception:
         pass
     return None
+
+
+def fetch_outdoor_temp_open_meteo(lat: float, lon: float, timeout_sec: float = 4.0):
+    """Return current outdoor temperature in °C via Open-Meteo, or None on failure."""
+    try:
+        qs = urlencode({
+            "latitude": f"{lat:.6f}",
+            "longitude": f"{lon:.6f}",
+            "current": "temperature_2m",
+            "timezone": "auto",
+        })
+        url = f"https://api.open-meteo.com/v1/forecast?{qs}"
+        with urlopen(url, timeout=max(1.0, timeout_sec)) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        cur = data.get("current", {})
+        val = cur.get("temperature_2m")
+        if val is None:
+            return None
+        return float(val)
+    except Exception:
+        return None
+
+
+def weather_worker(state: dict, lock: threading.Lock, provider: str,
+                   lat: float, lon: float, refresh_sec: float, timeout_sec: float):
+    """Background updater for outdoor weather cache."""
+    while not stop:
+        now_ts = time.time()
+        temp = None
+        if provider == "open-meteo":
+            temp = fetch_outdoor_temp_open_meteo(lat=lat, lon=lon, timeout_sec=timeout_sec)
+
+        with lock:
+            state["last_try_ts"] = now_ts
+            if temp is not None:
+                state["temp_c"] = temp
+                state["last_ok_ts"] = now_ts
+                state["error"] = None
+            else:
+                state["error"] = "fetch_failed"
+
+        sleep_left = max(5.0, refresh_sec)
+        while sleep_left > 0 and not stop:
+            step = min(1.0, sleep_left)
+            time.sleep(step)
+            sleep_left -= step
 
 # ------------------ Tiny 3x5 font for temperature ------------------
 DIGITS_3x5 = {
@@ -328,7 +378,7 @@ def hour_sparkle(device, duration: float = 0.45, density: float = 0.15, fps: int
                         draw.point((x, y), fill="white")
         time.sleep(frame_dt)
 
-def minute_swipe(device, timestr: str, time_font, blink: bool,
+def minute_swipe(device, timestr: str, time_font,
                  left_reserved: int, colon_vgap: int,
                  temp_txt: str | None, swipe_px: int = 8, frame_delay: float = 0.03,
                  time_align: str = "right"):
@@ -395,6 +445,28 @@ def main():
     show_temp   = _env_int("LED_DRAW_TEMP", 1)
     show_unit_c = _env_int("LED_TEMP_SHOW_C", 1)
 
+    # --- Temperature cycle (CPU / outdoor) ---
+    temp_cycle_enable = _env_bool("LED_TEMP_CYCLE_ENABLE", 0)
+    temp_cycle_items_raw = os.getenv("LED_TEMP_CYCLE_ITEMS", "cpu,outdoor")
+    temp_cycle_items = [x.strip().lower() for x in temp_cycle_items_raw.split(",") if x.strip()]
+    if not temp_cycle_items:
+        temp_cycle_items = ["cpu", "outdoor"]
+    temp_cycle_every = max(2.0, _env_float("LED_TEMP_CYCLE_EVERY", 10.0))
+
+    # --- Outdoor weather ---
+    weather_enable = _env_bool("LED_WEATHER_ENABLE", 0)
+    weather_provider = os.getenv("LED_WEATHER_PROVIDER", "open-meteo").strip().lower() or "open-meteo"
+    weather_refresh = max(60.0, _env_float("LED_WEATHER_REFRESH", 1800.0))
+    weather_timeout = max(1.0, _env_float("LED_WEATHER_TIMEOUT", 4.0))
+    try:
+        weather_lat = float(os.getenv("LED_WEATHER_LAT", ""))
+        weather_lon = float(os.getenv("LED_WEATHER_LON", ""))
+        weather_coords_ok = True
+    except Exception:
+        weather_lat = 0.0
+        weather_lon = 0.0
+        weather_coords_ok = False
+
     # --- Auto brightness (day/night) ---
     auto_dim   = _env_bool("LED_AUTO_DIM", 1)
     day_brt    = _env_int("LED_BRIGHTNESS_DAY", 12)     # 0..255
@@ -419,8 +491,10 @@ def main():
 
     profile_name = os.getenv("LED_PROFILE_NAME", "custom")
     print(
-        f"[led-clock] start profile={profile_name} temp={int(show_temp)} ticker_every={ticker_every} "
-        f"seconds_bar={int(seconds_bar)} minute_swipe={int(minute_swipe_en)} "
+        f"[led-clock] start profile={profile_name} temp={int(show_temp)} "
+        f"temp_cycle={int(temp_cycle_enable)} cycle_items={','.join(temp_cycle_items)} cycle_every={temp_cycle_every}s "
+        f"weather={int(weather_enable)} provider={weather_provider} coords_ok={int(weather_coords_ok)} refresh={weather_refresh}s "
+        f"ticker_every={ticker_every} seconds_bar={int(seconds_bar)} minute_swipe={int(minute_swipe_en)} "
         f"info_enable={int(info_enable)} info_pages={','.join(info_pages)} info_rotate={info_rotate_sec}s "
         f"brightness(day/night)={day_brt}/{night_brt}",
         flush=True,
@@ -441,6 +515,33 @@ def main():
     # Info pages state
     info_idx = 0
     info_last_switch_ts = 0.0
+
+    # Weather cache + worker
+    weather_state = {"temp_c": None, "last_ok_ts": 0.0, "last_try_ts": 0.0, "error": None}
+    weather_lock = threading.Lock()
+    weather_thread = None
+    weather_needed = (
+        temp_cycle_enable
+        and ("outdoor" in temp_cycle_items or "weather" in temp_cycle_items)
+        and weather_enable
+        and weather_coords_ok
+    )
+    if weather_needed:
+        weather_thread = threading.Thread(
+            target=weather_worker,
+            kwargs={
+                "state": weather_state,
+                "lock": weather_lock,
+                "provider": weather_provider,
+                "lat": weather_lat,
+                "lon": weather_lon,
+                "refresh_sec": weather_refresh,
+                "timeout_sec": weather_timeout,
+            },
+            daemon=True,
+            name="led-weather-worker",
+        )
+        weather_thread.start()
 
     # Signals
     signal.signal(signal.SIGTERM, handle_signal)
@@ -513,14 +614,35 @@ def main():
             w_time = w_h + 1 + 1 + 1 + w_m  # gap=1, colon_w=1, gap=1
             left_alloc_max = max(0, device.width - w_time)
 
-            temp_c = get_cpu_temp_c()
-            temp_raw = "--" if temp_c is None else f"{int(round(max(-99, min(199, temp_c))))}"
-            w_nn, _  = small35_text_size(temp_raw)
+            cpu_temp_c = get_cpu_temp_c()
+            outdoor_temp_c = None
+            if weather_needed:
+                with weather_lock:
+                    ok_ts = float(weather_state.get("last_ok_ts") or 0.0)
+                    cached = weather_state.get("temp_c")
+                max_age = weather_refresh * 2.0
+                if cached is not None and (time.time() - ok_ts) <= max_age:
+                    outdoor_temp_c = float(cached)
+
+            selected_temp_c = cpu_temp_c
+            if temp_cycle_enable:
+                available = []
+                for item in temp_cycle_items:
+                    if item == "cpu" and cpu_temp_c is not None:
+                        available.append(cpu_temp_c)
+                    elif item in ("outdoor", "weather") and outdoor_temp_c is not None:
+                        available.append(outdoor_temp_c)
+                if available:
+                    idx = int(time.monotonic() // temp_cycle_every) % len(available)
+                    selected_temp_c = available[idx]
+
+            temp_raw = "--" if selected_temp_c is None else f"{int(round(max(-99, min(199, selected_temp_c))))}"
+            w_nn, _ = small35_text_size(temp_raw)
             w_nnC, _ = small35_text_size(temp_raw + ("C" if show_unit_c else ""))
 
             temp_txt = None
             left_reserved = 0
-            if _env_bool("LED_DRAW_TEMP", 1) and left_alloc_max >= 3:
+            if show_temp and left_alloc_max >= 3:
                 if show_unit_c and w_nnC <= left_alloc_max:
                     temp_txt = temp_raw + "C"
                 elif w_nn <= left_alloc_max:
@@ -531,7 +653,7 @@ def main():
             # Minute-change swipe (when minute changed since last render)
             if minute_swipe_en and (last_rendered_minute is None or now.minute != last_rendered_minute):
                 # Run swipe with the NEW minute value
-                minute_swipe(device, s, time_font, blink=False,
+                minute_swipe(device, s, time_font,
                              left_reserved=left_reserved, colon_vgap=colon_vgap,
                              temp_txt=temp_txt, swipe_px=minute_swipe_px, frame_delay=minute_swipe_dt,
                              time_align=time_align)
@@ -575,6 +697,19 @@ LED_COLON_VGAP=2          # vertical gap between colon dots (1..3)
 # Temperature widget
 LED_DRAW_TEMP=1
 LED_TEMP_SHOW_C=1
+
+# Temperature cycle (CPU / outdoor)
+LED_TEMP_CYCLE_ENABLE=0
+LED_TEMP_CYCLE_ITEMS=cpu,outdoor
+LED_TEMP_CYCLE_EVERY=10
+
+# Outdoor weather (Open-Meteo, no API key)
+LED_WEATHER_ENABLE=0
+LED_WEATHER_PROVIDER=open-meteo
+LED_WEATHER_LAT=55.7558
+LED_WEATHER_LON=37.6176
+LED_WEATHER_REFRESH=1800
+LED_WEATHER_TIMEOUT=4
 
 # Date ticker (English ASCII)
 LED_TICKER_EVERY=60       # seconds between scrolls (non-info mode)
